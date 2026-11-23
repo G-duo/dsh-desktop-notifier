@@ -1,6 +1,6 @@
 {
   "name": "dsh-desktop-notifier",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "author": "G-duo",
   "repository": {
     "type": "git",
@@ -40,7 +40,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "dsh": ">=0.2.2"
+    "dsh": ">=0.2.2-0"
   },
   "dsh": {
     "bundle": {

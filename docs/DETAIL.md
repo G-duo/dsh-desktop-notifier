@@ -9,10 +9,15 @@
 | 工具调用等待确认 | `approval/request` | 待确认 | 黄 `#F0B429` |
 | 提问等待回答 | `user-questions/request` | 待回答 | 黄 `#F0B429` |
 | 一轮正常结束 | `session/event` → `turn/end`（`completed`） | 已完成 | 绿 `#2FBF71` |
-| 一轮被中断 / 取消 | `turn/end`（`aborted`、`interrupted`） | 已中断 | 绿 `#2FBF71`（可改成红） |
+| 一轮被用户 / 父级取消 | `turn/end`（`aborted`，原因不是退出登录） | 已中断 | 绿 `#2FBF71`（可改成红） |
 | 一轮被阻断 | `turn/end`（`blocked`） | 已阻断 | 橙 `#FF8A3D` |
-| 一轮出错 | `turn/end`（`error`） | 出错 | 红 `#E5484D` |
+| 一轮运行失败 | `turn/end`（`error`，即 DSH 画「本轮运行失败」那种） | 运行失败 | 红 `#E5484D` |
+| 一轮被进程中止 | `turn/end`（`interrupted`，进程在本轮完成前退出） | 运行失败 | 红 `#E5484D` |
+| 一轮因退出登录而停 | `turn/end`（`aborted` + `deepseek-account/signed-out`） | 运行失败 | 红 `#E5484D` |
 | 输出达到上限 | `turn/end`（`max-tokens`） | 已达输出上限 | 黄 `#F0B429` |
+| 其它（未知结局） | `turn/end`（无法识别的原因） | 已结束 | 灰 `#8B8F98` |
+
+> 「运行失败」这一档严格对齐 DSH 自己的失败行：客户端 `turn-error.ts` 只为 `error`、`interrupted`、「退出登录导致的 aborted」三种结局画失败行（`locale.ts` 里那句 `本轮运行失败` 对应 `error`），所以这三种都用红色。用户自己按停止键的 `aborted` 仍然是绿色「已中断」。
 
 ## 卡片行为
 
@@ -24,13 +29,13 @@
 - 打扰控制：`suppressWhenFocused: true` 时，如果 DSH 窗口正在前台（你正看着它），**不弹**；整叠已经显示时，新事件直接并进当前叠，而不是再弹一叠。
 - 无声音：不播放任何提示音。
 - 点击：任意一张 toast 点一下即把 DSH 窗口激活到前台（已最小化会先还原；被其他前台窗口占着时会用 `AttachThreadInput` 兜底），整叠随后隐藏。toast 之间的透明间隙和四周的投影留白不挡鼠标——窗口在 `WM_NCHITTEST` 里对这些点回 `HTTRANSPARENT`，点击直接落到下面的窗口。
-- 停留：`durationMs` 后自动消失（默认 5 秒）；鼠标不需要移上去。
+- 停留：没人点击时 `durationMs`（默认 **30 秒**）后自动消失；鼠标不需要移上去，点了就立刻走「点击」那条链路提前收掉整叠。
 
 ## 实现方式
 
 插件本体是一个 **Host 插件**（`index.js`，ESM，导出 `apply(ctx, config)`），它只做两件事：监听上面那些钩子，把「要显示什么」写成一整行 JSON 通过 stdin 交给助手进程。
 
-画卡片的是包内的 **常驻 PowerShell 助手** `helper/notify.ps1`：Windows PowerShell 5.1 + WinForms + 少量 P/Invoke（`user32`、`gdi32`），一个进程只启动一次，之后一直等 stdin 的下一行，因此每次弹卡没有冷启动延迟。助手内嵌的 C# `ToastLayerForm : Form` 负责渲染：在 32bpp ARGB 位图上画完 shadow / 玻璃 / 描边 / 竖条 / 文字后，用 `GetDC` + `CreateCompatibleDC` + `SelectObject` 把位图交给 `UpdateLayeredWindow(ULW_ALPHA)`，窗口本身带 `WS_EX_LAYERED | WS_EX_NOACTIVATE`，所以既支持逐像素透明，又不会抢焦点；`WM_NCHITTEST` 只把画了 toast 的矩形算作客户区，其余透明区域返回 `HTTRANSPARENT`。
+画卡片的是包内的 **常驻 PowerShell 助手** `helper/notify.ps1`：Windows PowerShell 5.1 + WinForms + 少量 P/Invoke（`user32`、`gdi32`、`kernel32`），一个进程只启动一次，之后一直等 stdin 的下一行，因此每次弹卡没有冷启动延迟。助手内的计时器跑在 WinForms 消息循环上，所以读 stdin 必须**非阻塞**——它用 `PeekNamedPipe` 先探「有没有可读的数据」再决定要不要读，否则没有新消息时会把消息循环堵死，计时器、重绘和点击响应会一起停摆（管道被写端关闭时则干净退出）。助手内嵌的 C# `ToastLayerForm : Form` 负责渲染：在 32bpp ARGB 位图上画完 shadow / 玻璃 / 描边 / 竖条 / 文字后，用 `GetDC` + `CreateCompatibleDC` + `SelectObject` 把位图交给 `UpdateLayeredWindow(ULW_ALPHA)`，窗口本身带 `WS_EX_LAYERED | WS_EX_NOACTIVATE`，所以既支持逐像素透明，又不会抢焦点；`WM_NCHITTEST` 只把画了 toast 的矩形算作客户区，其余透明区域返回 `HTTRANSPARENT`。
 
 之所以要单独起一个进程：DSH 桌面版是用 `ELECTRON_RUN_AS_NODE=1` 把宿主当普通 Node 子进程拉起来的，插件里拿不到 Electron API，DSH 也没有给插件暴露系统通知 / 置顶窗口的接口。
 
@@ -40,7 +45,7 @@
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `durationMs` | `5000` | toast 停留毫秒数 |
+| `durationMs` | `30000` | 没人点击时 toast 停留毫秒数 |
 | `suppressWhenFocused` | `true` | DSH 窗口在前台时不弹 |
 | `mergeWindowMs` | `150` | 合并同一时刻多个事件的等待窗口 |
 | `notifyApprovals` | `true` | 待确认提醒 |
@@ -52,7 +57,9 @@
 | `accentDone` | `#2FBF71` | 完成的颜色 |
 | `accentInterrupted` | `#2FBF71` | 中断的颜色（想跟"完成"区分开就写 `#E5484D`） |
 | `accentBlocked` | `#FF8A3D` | 阻断的颜色 |
-| `accentError` | `#E5484D` | 出错的颜色 |
+| `accentFailed` | `#E5484D` | 「运行失败」（出错 / 进程中止 / 退出登录）的颜色 |
+| `accentUnknown` | `#8B8F98` | 无法识别的结局「已结束」的颜色 |
+| `accentError` | — | `accentFailed` 的旧名字，仍然被识别（两个都写时以 `accentFailed` 为准） |
 | `debug` | `false` | 打开后往插件目录写 `notifier-debug.log`（超过 256 KiB 自动清空） |
 
 ## 已知限制

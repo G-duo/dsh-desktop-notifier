@@ -30,6 +30,8 @@
 - **至多 4 张 toast 叠放**：并发事件在 150ms 窗口内合并，同状态同标题折叠成一条并带 `×N`，超出 `maxPopupItems` 的折叠成「还有 N 条通知」。
 - **只显示会话标题**：不显示正文、工具名、参数，不担心弹窗把隐私内容亮在屏幕上；标题拿不到时回退为「当前会话」。
 - **点击即回到 DSH**：任意一张 toast 点一下，还原并激活 DSH 主窗口，然后整叠消失。
+- **不点就留 30 秒**：没人点的 toast 会在桌面上停留 30 秒（`durationMs` 可调）再自己消失，不会一闪就没，也不会一直杵着。
+- **失败一定看得见（红）**：和 DSH 前端的失败行对齐——「本轮运行失败」(`error`)、进程在本轮完成前退出 (`interrupted`)、因退出登录被停 (`aborted`) 都归为红色「运行失败」，一眼就和绿色「已完成」区分开。
 - **真正的圆角与阴影**：每张 toast 画在 32bpp ARGB 位图上，用 `UpdateLayeredWindow` 推给每像素透明的分层窗口，圆角、投影、toast 之间的间隙都是透的；并且按显示器 DPI 用物理像素渲染（200% 缩放下也清晰）。
 - **不挡手**：只有 toast 本体接收点击，toast 之间的透明间隙和四周的投影留白会直接把点击透给下面的窗口。
 - **没有声音、不抢焦点**：toast 是 `WS_EX_NOACTIVATE` 的置顶窗体，不会偷走你的输入焦点。
@@ -76,7 +78,7 @@ winclass=WindowsForms10.Window.8.app.*_r16_ad1
 
 | 字段 | 默认值 | 说明 |
 | --- | --- | --- |
-| `durationMs` | `5000` | toast 停留毫秒数 |
+| `durationMs` | `30000` | 没人点击时 toast 停留毫秒数（30 秒） |
 | `suppressWhenFocused` | `true` | DSH 窗口在前台时不弹 |
 | `mergeWindowMs` | `150` | 并发事件合并窗口 |
 | `maxPopupItems` | `4` | 最多几张 toast，多出的折叠为「还有 N 条通知」 |
@@ -88,20 +90,21 @@ winclass=WindowsForms10.Window.8.app.*_r16_ad1
 | `accentDone` | `#2FBF71` | 完成颜色（绿） |
 | `accentInterrupted` | `#2FBF71` | 中断颜色（绿，按用户习惯与完成同色） |
 | `accentBlocked` | `#FF8A3D` | 被阻断颜色（橙） |
-| `accentError` | `#E5484D` | 出错颜色（红） |
+| `accentFailed` | `#E5484D` | 「运行失败」颜色（红）：出错、进程中止、退出登录 |
+| `accentUnknown` | `#8B8F98` | 无法识别的结局「已结束」颜色（灰） |
 | `debug` | `false` | 往 `notifier-debug.log` 写调试日志 |
 
-颜色写法是 `#RRGGBB`；中断想单独用别的颜色，把 `accentInterrupted` 改掉即可。
+颜色写法是 `#RRGGBB`；中断想单独用别的颜色，把 `accentInterrupted` 改掉即可。（`accentError` 是 `accentFailed` 从前的名字，写了仍然认。）
 
 ## 工作原理
 
 - `index.js` 是 Host 插件，用 `ctx.effect` 注册三个监听：
   - `approval/request`（waterfall）→ 有待确认的审批；
   - `user-questions/request`（waterfall）→ 有待回答的提问；
-  - `session/event` 里的 `turn/end` → 轮次结束，用 `event.data.reason.kind` 区分完成 / 中断 / 阻断 / 出错 / 达到输出上限。
+  - `session/event` 里的 `turn/end` → 轮次结束，用 `event.data.reason.kind` 区分完成 / 已中断 / 阻断 / 运行失败 / 达到输出上限；其中「运行失败」这一档与 DSH 前端的失败行一一对应（`error`、进程中途退出的 `interrupted`、退出登录导致的 `aborted`），都用红色。
   - 两个 waterfall 监听器结尾都会 `return next()`，把决定权原样交还给 DSH 原本的应答者，不改变任何审批结果。
 - 会话标题来自 `session/title` 事件（本地缓存）＋ `ctx.get('sessionTitle')` 作为兜底，拿不到就用「当前会话」。
-- 卡片由一个**常驻的 PowerShell 助手进程**绘制（`helper/notify.ps1`）。它先把自己声明为 per-monitor DPI aware，再按 `DpiX / 96` 缩放每一条设计尺寸；每张 toast 都画在 ARGB 位图上（暗紫渐变玻璃、1px 白→紫渐变描边、内缘顶部高光发丝线、按状态着色的 3px 前部竖条、柔和投影），宽度按标题长度自适应，再通过 `UpdateLayeredWindow` 交给每像素透明的 `WS_EX_LAYERED` 窗口。插件只在第一次需要时启动它，之后通过 stdin 传一行 JSON；助手退出时插件会回收进程。DSH 没有给插件任何系统通知或置顶窗口的接口，所以弹窗必须由外部进程完成——这是这个插件的存在理由。
+- 卡片由一个**常驻的 PowerShell 助手进程**绘制（`helper/notify.ps1`）。它先把自己声明为 per-monitor DPI aware，再按 `DpiX / 96` 缩放每一条设计尺寸；每张 toast 都画在 ARGB 位图上（暗紫渐变玻璃、1px 白→紫渐变描边、内缘顶部高光发丝线、按状态着色的 3px 前部竖条、柔和投影），宽度按标题长度自适应，再通过 `UpdateLayeredWindow` 交给每像素透明的 `WS_EX_LAYERED` 窗口。助手用 `PeekNamedPipe` 非阻塞地探 stdin（没消息时不占着消息循环，计时、重绘、点击都照常），插件只在第一次需要时启动它，之后通过 stdin 传一行 JSON；助手退出时插件会回收进程。DSH 没有给插件任何系统通知或置顶窗口的接口，所以弹窗必须由外部进程完成——这是这个插件的存在理由。
 
 ## 已知限制
 
@@ -121,7 +124,7 @@ winclass=WindowsForms10.Window.8.app.*_r16_ad1
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File helper\notify.ps1 -SelfTest
 ```
 
-它会弹一叠假 toast（含 `×2` 与「还有 N 条通知」两种形态），约 4 秒后模拟点击把 DSH 窗口拉到前台，并在 `helper/` 下留下三份可查的产物：
+它会弹一叠假 toast（待确认 / 已完成 / `×2` 合并 / **运行失败（红）** / 「还有 N 条通知」五种形态），约 4 秒后模拟点击把 DSH 窗口拉到前台，并在 `helper/` 下留下三份可查的产物：
 
 - `notify-toast-layer.png`：推送给分层窗口的原始 ARGB 位图；
 - `notify-selftest-shot.png`：从屏幕上原样截下的 toast 区域（带桌面背景，可检查圆角与投影）；

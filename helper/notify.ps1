@@ -8,9 +8,11 @@
         Sticky rows: they stay until the next "pending" message (an empty
         items list clears them). Used for prompts that need a human.
 
-    { "t": "events", "items": [ ... ], "durationMs": 5000, "suppressWhenFocused": true,
+    { "t": "events", "items": [ ... ], "durationMs": 30000, "suppressWhenFocused": true,
       "maxItems": 4, "shellPid": 15024 }
-        One-shot rows that expire after durationMs.
+        One-shot rows: they stay for durationMs (30 s by default) and disappear
+        on their own if nobody clicks them; clicking raises the DSH window and
+        clears the stack early.
 
   Each toast is drawn on a 32bpp ARGB surface and pushed to a per-pixel
   WS_EX_LAYERED window with UpdateLayeredWindow, so the rounded glass edges,
@@ -48,6 +50,24 @@ using System.Runtime.InteropServices;
 public static class DpiFix {
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr ctx);
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
+}
+// stdin must be probed, never blocking-read: this script drives a WinForms
+// message loop, so a blocking read would freeze the clock, the repaint and the
+// click handling for as long as no message arrives.
+public static class DshIn {
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern IntPtr GetStdHandle(int nStdHandle);
+    [DllImport("kernel32.dll", SetLastError = true)] private static extern bool PeekNamedPipe(IntPtr h, IntPtr buf, uint bufSize, IntPtr bytesRead, out uint avail, IntPtr overlapped);
+    // -2: the writer closed the pipe. -1: stdin is not a pipe (file/console).
+    // >= 0: that many bytes are waiting to be read right now.
+    public static int Pending() {
+        IntPtr h = GetStdHandle(-10);
+        if (h == IntPtr.Zero || h == new IntPtr(-1)) return -1;
+        uint avail;
+        if (!PeekNamedPipe(h, IntPtr.Zero, 0, IntPtr.Zero, out avail, IntPtr.Zero)) {
+            return Marshal.GetLastWin32Error() == 109 ? -2 : -1;
+        }
+        return (int)avail;
+    }
 }
 '@
 $null = [DpiFix]::SetProcessDpiAwarenessContext([IntPtr](-4))
@@ -610,6 +630,7 @@ $script:EventRows = New-Object System.Collections.ArrayList
 $script:SnoozeUntil = [DateTime]::MinValue
 $script:LastSignature = ''
 $script:LastRaisedSignature = ''
+$script:ReaderClosed = $false
 $script:WindowHint = 'DeepSeek Harness'
 
 # This file must stay ASCII-only: Windows PowerShell 5.1 reads .ps1 files with
@@ -729,7 +750,7 @@ function Apply-Message($message) {
     foreach ($item in $items) { [void]$script:PendingRows.Add(@{ Row = (New-RowObject $item) }) }
     Write-Log ("recv pending items={0} shellPid={1}" -f $items.Count, $script:ShellPid)
   } else {
-    $duration = if ($message.durationMs) { [int]$message.durationMs } else { 5000 }
+    $duration = if ($message.durationMs) { [int]$message.durationMs } else { 30000 }
     if ($duration -lt 300) { $duration = 300 }
     $expires = [DateTime]::UtcNow.AddMilliseconds($duration)
     foreach ($item in $items) { [void]$script:EventRows.Add(@{ Row = (New-RowObject $item); Expires = $expires }) }
@@ -756,12 +777,13 @@ if ($SelfTest) {
           '{"label":"\u5F85\u786E\u8BA4","title":"\u91CD\u6784\u684C\u9762\u901A\u77E5\u52A9\u624B","accent":"#F0B429","count":1},' +
           '{"label":"\u5DF2\u5B8C\u6210","title":"\u63D2\u4EF6\u4E0Eskill\u662F\u5426\u540C\u4E49","accent":"#2FBF71","count":1},' +
           '{"label":"\u5DF2\u4E2D\u65AD","title":"\u64A4\u9500\u4EE3\u7801\u5757\u7981\u7528\u8981\u6C42","accent":"#2FBF71","count":2},' +
-          '{"label":"\u51FA\u9519","title":"probe \u5931\u8D25\u6392\u67E5","accent":"#E5484D","count":1},' +
-          '{"label":"\u5F85\u56DE\u7B54","title":"\u53D1\u5E03\u5230 GitHub \u7684\u4ED3\u5E93\u540D","accent":"#F0B429","count":1}' +
+          '{"label":"\u8FD0\u884C\u5931\u8D25","title":"probe \u5931\u8D25\u6392\u67E5","accent":"#E5484D","count":1},' +
+          '{"label":"\u5F85\u56DE\u7B54","title":"\u53D1\u5E03\u5230 GitHub \u7684\u4ED3\u5E93\u540D","accent":"#F0B429","count":1},' +
+          '{"label":"\u5DF2\u963B\u65AD","title":"\u6C99\u7BB1\u62D2\u7EDD\u5199\u76D8","accent":"#FF8A3D","count":1}' +
         ']'
         $fixture = @()
         $fixtureJson | ConvertFrom-Json | ForEach-Object { $fixture += $_ }
-        Apply-Message @{ t = 'pending'; items = $fixture; maxItems = 4; shellPid = 0 }
+        Apply-Message @{ t = 'pending'; items = $fixture; maxItems = 5; shellPid = 0 }
         $script:SuppressWhenFocused = $false
         Sync-Card
         Write-Log ("selftest stage1 visible={0} topmost={1} size={2}x{3} at={4},{5} rows={6} scale={7}" -f `
@@ -838,7 +860,18 @@ $poll = New-Object System.Windows.Forms.Timer
 $poll.Interval = $TickMs
 $poll.Add_Tick({
   try {
-    if ($reader.EndOfStream) { return }
+    $avail = [DshIn]::Pending()
+    if ($avail -eq -2) {
+      if (-not $script:ReaderClosed) {
+        $script:ReaderClosed = $true
+        Write-Log 'stdin closed: shutting down'
+        $card.Hide()
+        [System.Windows.Forms.Application]::ExitThread()
+      }
+      return
+    }
+    if ($avail -eq 0) { return }
+    if ($avail -lt 0 -and $reader.EndOfStream) { return }
     $line = $reader.ReadLine()
     if ($null -eq $line) { return }
     if ($line.Trim().Length -eq 0) { return }

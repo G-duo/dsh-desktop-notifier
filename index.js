@@ -26,9 +26,26 @@ const DEBUG_LOG = join(HERE, 'notifier-debug.log')
 const SYSTEM_ROOT = process.env.SystemRoot || 'C:\\Windows'
 const POWERSHELL = join(SYSTEM_ROOT, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
 
-/** Palette and label per notification kind. `accentInterrupted` follows the user's green-for-interrupted request. */
+/**
+ * mtime of this file, printed on activation: after an update it tells a freshly imported
+ * module apart from a stale one the host still has cached (the bundled copy is a link).
+ */
+const CODE_MTIME = (() => {
+  try {
+    return statSync(join(HERE, 'index.js')).mtime.toISOString()
+  } catch {
+    return 'unknown'
+  }
+})()
+
+/**
+ * Palette and label per notification kind. `accentInterrupted` follows the user's
+ * green-for-interrupted request; `accentFailed` covers every ending DSH paints as a
+ * failure row ("本轮运行失败").
+ */
 const DEFAULTS = {
-  durationMs: 5000,
+  // How long a toast stays on screen when nobody clicks it (30 s).
+  durationMs: 30000,
   suppressWhenFocused: true,
   mergeWindowMs: 150,
   notifyApprovals: true,
@@ -41,11 +58,19 @@ const DEFAULTS = {
   accentDone: '#2FBF71',
   accentInterrupted: '#2FBF71',
   accentBlocked: '#FF8A3D',
-  accentError: '#E5484D',
+  accentFailed: '#E5484D',
+  accentUnknown: '#8B8F98',
 }
 
 /**
  * Map one `TurnEndReason` to a notification descriptor.
+ *
+ * Kept in step with the Desktop client's own failure rows
+ * (`dsh-client-ui-chat/src/client/conversation-nodes/turn-error.ts`): DSH draws a
+ * failure row for `error`, for an `interrupted` turn (process exited mid-turn), and
+ * for an `aborted` turn cancelled by the `deepseek-account/signed-out` hook — so all
+ * three are treated as failures here. User/parent cancellations stay green.
+ *
  * @param {unknown} reason - the `turn/end` payload.
  * @param {object} o - resolved options.
  * @returns {{kind: string, label: string, accent: string} | undefined}
@@ -56,18 +81,25 @@ function reasonToItem(reason, o) {
     case 'completed':
       return { kind: 'done', label: '已完成', accent: o.accentDone }
     case 'aborted':
-    case 'interrupted':
+    case 'interrupted': {
+      const cause = reason && reason.reason
+      const signedOut = Boolean(cause) && cause.kind === 'hook' && cause.reason === 'deepseek-account/signed-out'
+      if (kind === 'interrupted' || signedOut) {
+        return { kind: 'failed', label: '运行失败', accent: o.accentFailed }
+      }
       return { kind: 'interrupted', label: '已中断', accent: o.accentInterrupted }
+    }
     case 'blocked':
       return { kind: 'blocked', label: '已阻断', accent: o.accentBlocked }
     case 'error':
-      return { kind: 'error', label: '出错', accent: o.accentError }
+      return { kind: 'failed', label: '运行失败', accent: o.accentFailed }
     case 'max-tokens':
       return { kind: 'warn', label: '已达输出上限', accent: o.accentPending }
     case 'forked':
       return undefined
     default:
-      return { kind: 'done', label: '已完成', accent: o.accentDone }
+      // An unknown ending must not masquerade as a success.
+      return { kind: 'unknown', label: '已结束', accent: o.accentUnknown }
   }
 }
 
@@ -78,6 +110,10 @@ function reasonToItem(reason, o) {
  */
 export function apply(ctx, config) {
   const o = { ...DEFAULTS, ...(config && typeof config === 'object' ? config : {}) }
+  // `accentError` is the pre-0.2.2 name of `accentFailed`; keep honouring a config that still sets it.
+  if (config && typeof config === 'object' && config.accentError !== undefined && config.accentFailed === undefined) {
+    o.accentFailed = config.accentError
+  }
 
   /** sessionId -> latest accepted title, from `session/title` events. */
   const titles = new Map()
@@ -110,7 +146,7 @@ export function apply(ctx, config) {
     }
   }
 
-  dlog(`activated helper=${HELPER} suppressWhenFocused=${o.suppressWhenFocused}`)
+  dlog(`activated code=${CODE_MTIME} helper=${HELPER} suppressWhenFocused=${o.suppressWhenFocused}`)
 
   const ensureHelper = () => {
     if (child && child.exitCode === null && !child.killed) return child
