@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Desktop notifications",
+    "description": "Shows a semi-transparent, always-on-top card in the bottom-right corner of the screen when a request needs confirmation or an answer, and when a turn is finished, interrupted, blocked, or failed. The card shows only the session title, colour-codes each state, stays silent, merges simultaneous events into one card, and raises the DSH window when clicked.",
+    "detail": "docs/DETAIL.md"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "name": "dsh-desktop-notifier",
+  "version": "0.2.0",
+  "author": "G-duo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/G-duo/dsh-desktop-notifier.git"
+  },
+  "homepage": "https://github.com/G-duo/dsh-desktop-notifier#readme",
+  "bugs": {
+    "url": "https://github.com/G-duo/dsh-desktop-notifier/issues"
+  },
+  "description": "Bottom-right, always-on-top desktop card when an approval or question is pending, or a turn ends. · 待确认、待回答或任务结束时在屏幕右下角弹出置顶提醒卡片。",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "helper/notify.ps1",
+    "locale/*.json",
+    "docs",
+    "icon.svg",
+    "assets/icon-180.png",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "icon": "./icon.svg",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "notification",
+    "notify",
+    "提醒"
+  ],
+  "license": "MIT",
+  "engines": {
+    "dsh": ">=0.2.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+# dsh-desktop-notifier：桌面提醒插件（DeepSeek Harness 插件）
+#
+# 监听两个宿主钩子，交给常驻的 PowerShell 助手进程，在屏幕右下角叠一叠 Nocturne 风格 toast：
+#   1. approval/request、user-questions/request —— 有请求在等待人工确认 / 回答
+#   2. session/event 的 turn/end —— 任务结束（完成 / 中断 / 阻断 / 出错）
+#
+# 所有配置都有默认值，整段 config 删掉也能正常跑；助手进程随插件启停。
+# 可选项（示例）：
+#
+#   - id: dsh-desktop-notifier
+#     config:
+#       durationMs: 5000             # toast 停留毫秒数，默认 5000
+#       suppressWhenFocused: true    # DSH 窗口在前台时不打扰，默认 true
+#       mergeWindowMs: 150           # 同一时刻多个事件合并成一条的等待窗口
+#       notifyApprovals: true        # 待确认提醒
+#       notifyQuestions: true        # 待回答提醒
+#       notifyTurnEnd: true          # 任务结束提醒
+#       skipSubagentTurns: true      # 子代理轮次结束不提醒
+#       maxPopupItems: 4             # 最多几张 toast，多出的折叠成“还有 N 条通知”
+#       accentPending: '#F0B429'     # 待确认：黄
+#       accentDone: '#2FBF71'        # 完成：绿
+#       accentInterrupted: '#2FBF71' # 中断：绿（想改成红就写 '#E5484D'）
+#       accentBlocked: '#FF8A3D'     # 阻断：橙
+#       accentError: '#E5484D'       # 出错：红
+#       debug: true                  # 往插件目录写 notifier-debug.log，排查完可改 false
+- insert:
+    - id: dsh-desktop-notifier
+      name: dsh-desktop-notifier
+      config:
+        debug: true

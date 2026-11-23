@@ -1,0 +1,12 @@
+# runtime artifacts (never publish)
+notifier-debug.log
+*.log
+check*.txt
+helper/*-out.txt
+helper/diag.txt
+helper/*.png
+
+# tooling
+node_modules/
+.DS_Store
+Thumbs.db
