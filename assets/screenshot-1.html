@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>dsh-win-notifier — toasts on the desktop</title>
+<style>
+  :root {
+    --ui: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif;
+    --radius: 14px;
+    --card-w: 296px;
+    --card-h: 60px;
+    --gap: 8px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 1200px; height: 750px;
+    overflow: hidden;
+    background: #101116;
+    font-family: var(--ui);
+  }
+
+  /* ---- stand-in desktop so the toasts are shown where they actually appear ---- */
+  .desktop {
+    position: relative;
+    width: 1200px; height: 750px;
+    background:
+      radial-gradient(1200px 760px at 78% 8%, #1E1B30 0%, #161723 42%, #0E0F14 100%);
+  }
+  .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(900px 640px at 38% 62%, rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 100%);
+  }
+  /* faint window ghost, far behind, so the shot reads as "on a desktop" */
+  .ghost {
+    position: absolute; left: 96px; top: 84px;
+    width: 760px; height: 470px;
+    border-radius: 10px;
+    background: linear-gradient(160deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+    border: 1px solid rgba(255,255,255,.05);
+    box-shadow: 0 40px 90px rgba(0,0,0,.45);
+  }
+  .ghost::before {
+    content: "";
+    position: absolute; left: 0; top: 0; right: 0; height: 34px;
+    border-radius: 10px 10px 0 0;
+    background: rgba(255,255,255,.035);
+    border-bottom: 1px solid rgba(255,255,255,.04);
+  }
+  .ghost .dot {
+    position: absolute; top: 13px; width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,.16);
+  }
+  .ghost .d1 { left: 16px; }
+  .ghost .d2 { left: 32px; }
+  .ghost .d3 { left: 48px; }
+  /* faint conversation skeleton: the DSH window the toast is announcing */
+  .ghost .bubble {
+    position: absolute;
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.022));
+    border: 1px solid rgba(255,255,255,.035);
+  }
+  .ghost .b1 { left: 32px; top: 62px;  width: 430px; height: 92px; }
+  .ghost .b2 { left: 214px; top: 174px; width: 514px; height: 128px; }
+  .ghost .b3 { left: 32px; top: 322px; width: 386px; height: 74px; }
+  .ghost .line {
+    position: absolute; height: 7px; border-radius: 4px;
+    background: rgba(255,255,255,.075);
+  }
+  .ghost .l1 { left: 54px; top: 86px;  width: 292px; }
+  .ghost .l2 { left: 54px; top: 104px; width: 214px; }
+  .ghost .l3 { left: 236px; top: 198px; width: 372px; }
+  .ghost .l4 { left: 236px; top: 216px; width: 318px; }
+  .ghost .l5 { left: 236px; top: 234px; width: 244px; }
+  .ghost .l6 { left: 54px;  top: 346px; width: 258px; }
+
+  .stack {
+    position: absolute;
+    right: 40px;
+    bottom: 44px;
+    width: var(--card-w);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+    align-items: stretch;
+  }
+
+  /* ---- one Nocturne toast ---- */
+  .toast {
+    position: relative;
+    height: var(--card-h);
+    border-radius: var(--radius);
+    padding: 1px; /* gradient hairline border */
+    background: linear-gradient(45deg, rgba(255,255,255,.212), rgba(167,139,250,.329));
+    box-shadow:
+      0 14px 34px rgba(0,0,0,.55),
+      0 3px 10px rgba(0,0,0,.4);
+  }
+  .toast .glass {
+    position: relative;
+    height: 100%;
+    border-radius: calc(var(--radius) - 1px);
+    overflow: hidden;
+    background: linear-gradient(55deg, rgba(20,16,29,.886), rgba(8,6,14,.941));
+  }
+  /* hairline highlight hugging the inside of the top edge */
+  .toast .glass::before {
+    content: "";
+    position: absolute; inset: 0;
+    border-radius: inherit;
+    border: 1px solid transparent;
+    background: linear-gradient(180deg, rgba(255,255,255,.094), rgba(255,255,255,0) 70%) border-box;
+    -webkit-mask: linear-gradient(#000 0 0) padding-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
+  .bar {
+    position: absolute;
+    left: 8px; top: 11px; bottom: 11px;
+    width: 3px;
+    border-radius: 1.5px;
+  }
+  .bar.pending     { background: linear-gradient(180deg, #F6CC62, #A3760F); }  /* #F0B429 +30% white / −22% black */
+  .bar.done        { background: linear-gradient(180deg, #60D394, #1E7F48); }  /* #2FBF71 */
+  .bar.failed      { background: linear-gradient(180deg, #EE7C80, #A52227); }  /* #E5484D */
+  .bar.blocked     { background: linear-gradient(180deg, #FFAC74, #B1551C); }  /* #FF8A3D */
+  .bar.more        { background: linear-gradient(180deg, #B0B6BE, #6F757D); }  /* rgb(150,158,170) */
+
+  .label {
+    position: absolute;
+    left: 20px; top: 14px;
+    font-size: 9.6px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: rgba(198,194,210,.62);
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .title {
+    position: absolute;
+    left: 20px; top: 29px;
+    right: 13px;
+    font-size: 13.6px;
+    font-weight: 400;
+    color: rgba(244,241,250,.965);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .title.muted { color: rgba(190,186,200,.557); }
+  .count {
+    position: absolute;
+    right: 13px; top: 29px;
+    font-size: 10.6px;
+    color: rgba(190,186,200,.557);
+    line-height: 1.1;
+  }
+  .toast.has-count .title { right: 46px; }
+
+  .caption {
+    position: absolute;
+    left: 40px; bottom: 44px;
+    font-size: 12px;
+    color: rgba(255,255,255,.32);
+    letter-spacing: .3px;
+  }
+</style>
+</head>
+<body>
+  <div class="desktop">
+    <div class="ghost">
+      <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      <span class="bubble b1"></span><span class="bubble b2"></span><span class="bubble b3"></span>
+      <span class="line l1"></span><span class="line l2"></span>
+      <span class="line l3"></span><span class="line l4"></span><span class="line l5"></span>
+      <span class="line l6"></span>
+    </div>
+    <div class="vignette"></div>
+
+    <div class="stack">
+      <div class="toast">
+        <div class="glass">
+          <div class="bar pending"></div>
+          <div class="label">待 确 认</div>
+          <div class="title">重构桌面通知助手</div>
+        </div>
+      </div>
+
+      <div class="toast">
+        <div class="glass">
+          <div class="bar done"></div>
+          <div class="label">已 完 成</div>
+          <div class="title">市场索引条目已生成</div>
+        </div>
+      </div>
+
+      <div class="toast has-count">
+        <div class="glass">
+          <div class="bar failed"></div>
+          <div class="label">运 行 失 败</div>
+          <div class="title">probe 失败排查</div>
+          <div class="count">×2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
