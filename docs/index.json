@@ -7,7 +7,7 @@
   },
   "plugins": [
     {
-      "name": "dsh-desktop-notifier",
+      "name": "dsh-win-notifier",
       "title": { "en": "Desktop Notifier", "zh": "桌面提醒" },
       "description": {
         "en": "A bottom-right, always-on-top desktop toast for DeepSeek Harness: it alerts you when an approval or question is pending, or when a turn ends.",
@@ -15,15 +15,15 @@
       },
       "icon": "icons/icon.svg",
       "author": "G-duo",
-      "homepage": "https://github.com/G-duo/dsh-desktop-notifier#readme",
-      "repository": { "url": "https://github.com/G-duo/dsh-desktop-notifier" },
+      "homepage": "https://github.com/G-duo/dsh-win-notifier#readme",
+      "repository": { "url": "https://github.com/G-duo/dsh-win-notifier" },
       "versions": [
         {
           "version": "0.2.0",
           "publishTimestamp": 1795403855,
           "source": {
             "type": "git",
-            "url": "https://github.com/G-duo/dsh-desktop-notifier",
+            "url": "https://github.com/G-duo/dsh-win-notifier",
             "commit": "3a15af5c70b1266db6d808d2b4edf642d154bf96"
           },
           "engines": { "dsh": ">=0.2.2-0" }
@@ -33,7 +33,7 @@
           "publishTimestamp": 1795420858,
           "source": {
             "type": "git",
-            "url": "https://github.com/G-duo/dsh-desktop-notifier",
+            "url": "https://github.com/G-duo/dsh-win-notifier",
             "commit": "6d396de48220207d8046514cadf5c56aaff029fb"
           },
           "engines": { "dsh": ">=0.2.2-0" }

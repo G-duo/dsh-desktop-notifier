@@ -1,4 +1,4 @@
-# dsh-desktop-notifier：桌面提醒插件（DeepSeek Harness 插件）
+# dsh-win-notifier：桌面提醒插件（DeepSeek Harness 插件）
 #
 # 监听两个宿主钩子，交给常驻的 PowerShell 助手进程，在屏幕右下角叠一叠 Nocturne 风格 toast：
 #   1. approval/request、user-questions/request —— 有请求在等待人工确认 / 回答
@@ -7,7 +7,7 @@
 # 所有配置都有默认值，整段 config 删掉也能正常跑；助手进程随插件启停。
 # 可选项（示例）：
 #
-#   - id: dsh-desktop-notifier
+#   - id: dsh-win-notifier
 #     config:
 #       durationMs: 30000            # 没人点击时 toast 停留毫秒数，默认 30000（30 秒）
 #       suppressWhenFocused: true    # DSH 窗口在前台时不打扰，默认 true
@@ -26,7 +26,7 @@
 #       #（旧名 accentError 仍然认，等价于 accentFailed）
 #       debug: true                  # 往插件目录写 notifier-debug.log，排查完可改 false
 - insert:
-    - id: dsh-desktop-notifier
-      name: dsh-desktop-notifier
+    - id: dsh-win-notifier
+      name: dsh-win-notifier
       config:
         debug: true

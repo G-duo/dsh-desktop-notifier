@@ -13,7 +13,7 @@
  * or always-on-top seam: the Desktop shell spawns this process with
  * ELECTRON_RUN_AS_NODE=1, so no Electron API is reachable from here.
  *
- * @module @local/dsh-desktop-notifier
+ * @module @local/dsh-win-notifier
  */
 import { appendFileSync, statSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'

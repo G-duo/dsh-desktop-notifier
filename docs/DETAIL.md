@@ -1,4 +1,4 @@
-# 桌面通知（dsh-desktop-notifier）
+# 桌面通知（dsh-win-notifier）
 
 有待确认 / 待回答的请求，或者一轮任务结束时，在屏幕右下角弹出**一叠半透明深色、置顶、无声音的 Nocturne 风格 toast**；每张 toast **只显示会话标题**，左侧一条 3px 竖条按状态渐变着色，点一下就把 DSH 窗口拉到前台。
 
@@ -86,7 +86,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File helper\notify.ps1 -SelfT
 
 ## 卸载
 
-在 Plugins（插件管理）面板里把 `dsh-desktop-notifier` 移除即可；助手进程随插件停用一起退出，不残留后台进程。
+在 Plugins（插件管理）面板里把 `dsh-win-notifier` 移除即可；助手进程随插件停用一起退出，不残留后台进程。
 
 ## 实测记录
 

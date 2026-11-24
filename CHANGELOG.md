@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3 — 2026-11-24
+
+改名，为了和别人的同名插件区分开。
+
+- 包名从 `dsh-desktop-notifier` 改为 **`dsh-win-notifier`**，仓库同步改名为 `G-duo/dsh-win-notifier`。
+- 原因：`dsh-desktop-notifier` 这个名字在 npm 上已被 `lurejewel` 占用，在 DSH 插件市场（awesome-dsh-plugin 索引，按包名匹配）里也已有 `Mi-liu` 的同名条目，市场卡片会顶着别人的署名。换个不重名的名字之后，市场搜索才是唯一命中。
+- `package.json` 的 `name` / `repository` / `homepage` / `bugs`、`cordis.patch.yml` 的条目 id、`index.js` 的模块注释、README 与 docs 里的链接全部同步更新。
+- 功能没有任何改动。
+
 ## 0.2.2 — 2026-11-23
 
 「运行失败」也进提醒列表，用红色。

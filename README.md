@@ -1,4 +1,4 @@
-# dsh-desktop-notifier
+# dsh-win-notifier
 
 给 **DeepSeek Harness（DSH）桌面端**加一个不打扰的桌面提醒：有待确认的审批、待回答的提问，或者一轮任务结束时，在**屏幕右下角弹出一叠 Nocturne 风格的半透明置顶 toast**——只显示会话标题，**左侧竖条按状态区分颜色**，**没有声音**，点一下就把 DSH 窗口拉到前台。
 
@@ -46,10 +46,11 @@
 
 三种方式任选：
 
-1. **插件市场**：在 DSH 的插件面板（dshmarket / Plugins 页）搜索 `dsh-desktop-notifier`。（需要先收录进 awesome-dsh-plugin 精选列表）
+1. **插件市场**：在 DSH 的插件面板（dshmarket / Plugins 页）搜索 `dsh-win-notifier`。（需要先收录进 awesome-dsh-plugin 精选列表）
+   > 本插件 0.2.3 起由 `dsh-desktop-notifier` 改名而来。市场里可能仍能搜到另一个同名条目 `Mi-liu/dsh-desktop-notifier`、以及 npm 上 `lurejewel` 发布的同名包——两者都与此仓库无关。
 2. **命令行**：
    ```sh
-   dsh plugin --profile desktop add github:G-duo/dsh-desktop-notifier
+   dsh plugin --profile desktop add github:G-duo/dsh-win-notifier
    ```
 3. **本地目录**：把本仓库下载到本地，在 Plugins 面板里「添加插件 → 选择本地目录」。
 
